@@ -8,6 +8,8 @@ import (
 	"go/types"
 )
 
+var empty = struct{}{}
+
 type testVisitor struct {
 	info types.Info
 }
@@ -29,7 +31,7 @@ func (v *testVisitor) ifMethodReturnInterface(node ast.Node, funcDecl func(t *as
 	}
 }
 
-func (v *testVisitor) ifGenDecl(stmt ast.Stmt, genDecl func(genDecl *ast.GenDecl)) {
+func (v *testVisitor) ifDeclVar(stmt ast.Stmt, genDecl func(genDecl *ast.GenDecl)) {
 	if decl, ok := stmt.(*ast.DeclStmt); ok {
 		if gDel, ok := decl.Decl.(*ast.GenDecl); ok {
 			if gDel.Tok != token.VAR {
@@ -40,7 +42,11 @@ func (v *testVisitor) ifGenDecl(stmt ast.Stmt, genDecl func(genDecl *ast.GenDecl
 	}
 }
 
-var emptyStruct = struct{}{}
+func (v *testVisitor) ifAssign(stmt ast.Stmt, assgin func(assign *ast.AssignStmt)) {
+	if asStmt, ok := stmt.(*ast.AssignStmt); ok {
+		assgin(asStmt)
+	}
+}
 
 func (v *testVisitor) Visit(node ast.Node) (w ast.Visitor) {
 	v.ifMethodReturnInterface(node, func(t *ast.FuncDecl) {
@@ -48,7 +54,7 @@ func (v *testVisitor) Visit(node ast.Node) (w ast.Visitor) {
 		mayNilVars := make(map[string]struct{})
 
 		for _, stmt := range t.Body.List {
-			v.ifGenDecl(stmt, func(genDecl *ast.GenDecl) {
+			v.ifDeclVar(stmt, func(genDecl *ast.GenDecl) {
 				for _, spec := range genDecl.Specs {
 					if varSpec, ok := spec.(*ast.ValueSpec); ok {
 						if _, ok := varSpec.Type.(*ast.StarExpr); !ok {
@@ -60,8 +66,21 @@ func (v *testVisitor) Visit(node ast.Node) (w ast.Visitor) {
 								value = &(varSpec.Values[i])
 							}
 							if value == nil || v.isNil(*value) {
-								mayNilVars[name.Name] = emptyStruct
+								mayNilVars[name.Name] = empty
 							}
+						}
+					}
+				}
+			})
+
+			v.ifAssign(stmt, func(assign *ast.AssignStmt) {
+				for i, lexp := range assign.Lhs {
+					if lIdent, lok := lexp.(*ast.Ident);  lok {
+						isNil := v.isNil(assign.Rhs[i])
+						if !isNil {
+							delete(mayNilVars, lIdent.Name)
+						} else {
+							mayNilVars[lIdent.Name] = empty
 						}
 					}
 				}
@@ -118,6 +137,8 @@ func (t *TestErr) Error() string {
 
 func b() error {
     var err *TestErr = nil
+    err = &TestErr{}
+    err = nil
 	return err
 }
 
