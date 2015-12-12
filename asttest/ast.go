@@ -48,6 +48,12 @@ func (v *testVisitor) ifAssign(stmt ast.Stmt, assgin func(assign *ast.AssignStmt
 	}
 }
 
+func (v *testVisitor) ifIf(stmt ast.Stmt, fullIf func(ifStmt *ast.IfStmt)) {
+	if ifStmt, ok := stmt.(*ast.IfStmt); ok {
+		fullIf(ifStmt)
+	}
+}
+
 func (v *testVisitor) Visit(node ast.Node) (w ast.Visitor) {
 	v.ifMethodReturnInterface(node, func(t *ast.FuncDecl) {
 
@@ -75,7 +81,7 @@ func (v *testVisitor) Visit(node ast.Node) (w ast.Visitor) {
 
 			v.ifAssign(stmt, func(assign *ast.AssignStmt) {
 				for i, lexp := range assign.Lhs {
-					if lIdent, lok := lexp.(*ast.Ident);  lok {
+					if lIdent, lok := lexp.(*ast.Ident); lok {
 						isNil := v.isNil(assign.Rhs[i])
 						if !isNil {
 							delete(mayNilVars, lIdent.Name)
@@ -83,6 +89,56 @@ func (v *testVisitor) Visit(node ast.Node) (w ast.Visitor) {
 							mayNilVars[lIdent.Name] = empty
 						}
 					}
+				}
+			})
+
+			v.ifIf(stmt, func(ifStmt *ast.IfStmt) {
+				assignInIf := make(map[string]struct{})
+				if ifStmt.Else == nil {
+					return
+				}
+				assignInBranch := make(map[string]struct{})
+				for _, bStmt := range ifStmt.Body.List {
+					v.ifAssign(bStmt, func(assign *ast.AssignStmt) {
+						for i, lexp := range assign.Lhs {
+							if lIdent, lok := lexp.(*ast.Ident); lok {
+								isNil := v.isNil(assign.Rhs[i])
+								if isNil {
+									delete(assignInBranch, lIdent.Name)
+								} else {
+									assignInBranch[lIdent.Name] = empty
+								}
+							}
+						}
+					})
+				}
+				for name, v := range assignInBranch {
+					assignInIf[name] = v
+				}
+				if elseBlock, ok := ifStmt.Else.(*ast.BlockStmt); ok {
+					assignInBranch := make(map[string]struct{})
+					for _, bStmt := range elseBlock.List {
+						v.ifAssign(bStmt, func(assign *ast.AssignStmt) {
+							for i, lexp := range assign.Lhs {
+								if lIdent, lok := lexp.(*ast.Ident); lok {
+									isNil := v.isNil(assign.Rhs[i])
+									if isNil {
+										delete(assignInBranch, lIdent.Name)
+									} else {
+										assignInBranch[lIdent.Name] = empty
+									}
+								}
+							}
+						})
+					}
+					for name, _ := range assignInIf {
+						if _, ok := assignInBranch[name]; !ok {
+							delete(assignInIf, name)
+						}
+					}
+				}
+				for assigned := range assignInIf {
+					delete(mayNilVars, assigned)
 				}
 			})
 
@@ -139,6 +195,11 @@ func b() error {
     var err *TestErr = nil
     err = &TestErr{}
     err = nil
+    if true {
+       err = &TestErr{}
+    } else {
+       err = &TestErr{}
+    }
 	return err
 }
 
