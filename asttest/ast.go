@@ -14,20 +14,24 @@ type testVisitor struct {
 	info types.Info
 }
 
-func (v *testVisitor) ifMethodReturnInterface(node ast.Node, funcDecl func(t *ast.FuncDecl)) {
+func (v *testVisitor) ifMethodReturnInterface(node ast.Node, funcDecl func(t *ast.FuncDecl, interfaceRet []int)) {
 	switch t := node.(type) {
 	case *ast.FuncDecl:
 		if t.Type.Results == nil {
 			return
 		}
 		results := t.Type.Results.List
-		for _, result := range results {
+		interfaceIndexs := make([]int, 0, len(results))
+		for i, result := range results {
 			tv := v.info.Types[result.Type]
-			if !types.IsInterface(tv.Type) {
-				continue
+			if types.IsInterface(tv.Type) {
+				interfaceIndexs = append(interfaceIndexs, i)
 			}
-			funcDecl(t)
 		}
+		if len(interfaceIndexs) == 0 {
+			return
+		}
+		funcDecl(t, interfaceIndexs)
 	}
 }
 
@@ -55,10 +59,10 @@ func (v *testVisitor) ifIf(stmt ast.Stmt, fullIf func(ifStmt *ast.IfStmt)) {
 }
 
 func (v *testVisitor) Visit(node ast.Node) (w ast.Visitor) {
-	v.ifMethodReturnInterface(node, func(t *ast.FuncDecl) {
+	v.ifMethodReturnInterface(node, func(t *ast.FuncDecl, interfaceRet []int) {
 
 		mayNilVars := make(map[string]struct{})
-
+		starTypeVars := make(map[string]struct{})
 		for _, stmt := range t.Body.List {
 			v.ifDeclVar(stmt, func(genDecl *ast.GenDecl) {
 				for _, spec := range genDecl.Specs {
@@ -67,6 +71,7 @@ func (v *testVisitor) Visit(node ast.Node) (w ast.Visitor) {
 							continue
 						}
 						for i, name := range varSpec.Names {
+							starTypeVars[name.Name] = empty
 							var value *ast.Expr
 							if len(varSpec.Values) > i {
 								value = &(varSpec.Values[i])
@@ -86,7 +91,9 @@ func (v *testVisitor) Visit(node ast.Node) (w ast.Visitor) {
 						if !isNil {
 							delete(mayNilVars, lIdent.Name)
 						} else {
-							mayNilVars[lIdent.Name] = empty
+							if _, ok := starTypeVars[lIdent.Name]; ok {
+								mayNilVars[lIdent.Name] = empty
+							}
 						}
 					}
 				}
@@ -100,7 +107,11 @@ func (v *testVisitor) Visit(node ast.Node) (w ast.Visitor) {
 			})
 
 			if retStmt, ok := stmt.(*ast.ReturnStmt); ok {
-				for _, result := range retStmt.Results {
+				if len(interfaceRet) == 0 {
+					return
+				}
+				for _, idx := range interfaceRet {
+					result := retStmt.Results[idx]
 					if ident, ok := result.(*ast.Ident); ok {
 						if _, ok := mayNilVars[ident.Name]; ok {
 							fmt.Printf("maybe return [%s] nil\n", ident.Name)
@@ -204,12 +215,14 @@ func (t *TestErr) Error() string {
 	return "test err"
 }
 
-func b() error {
+func b() (error, error) {
     var err *TestErr = nil
+    var a *TestErr = &TestErr{}
     err = &TestErr{}
     err = nil
     if true {
        if true {
+          a = nil
           err = &TestErr{}
        } else {
        	  err = &TestErr{}
@@ -219,11 +232,12 @@ func b() error {
     } else {
        err = &TestErr{}
     }
-	return err
+	return err, a
 }
 
 func main() {
-	if b() == nil {
+    e1, _ := b()
+	if e1 == nil {
 		panic("b == nil")
 	} else {
 		panic("b != nil")
