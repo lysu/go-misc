@@ -93,51 +93,8 @@ func (v *testVisitor) Visit(node ast.Node) (w ast.Visitor) {
 			})
 
 			v.ifIf(stmt, func(ifStmt *ast.IfStmt) {
-				assignInIf := make(map[string]struct{})
-				if ifStmt.Else == nil {
-					return
-				}
-				assignInBranch := make(map[string]struct{})
-				for _, bStmt := range ifStmt.Body.List {
-					v.ifAssign(bStmt, func(assign *ast.AssignStmt) {
-						for i, lexp := range assign.Lhs {
-							if lIdent, lok := lexp.(*ast.Ident); lok {
-								isNil := v.isNil(assign.Rhs[i])
-								if isNil {
-									delete(assignInBranch, lIdent.Name)
-								} else {
-									assignInBranch[lIdent.Name] = empty
-								}
-							}
-						}
-					})
-				}
-				for name, v := range assignInBranch {
-					assignInIf[name] = v
-				}
-				if elseBlock, ok := ifStmt.Else.(*ast.BlockStmt); ok {
-					assignInBranch := make(map[string]struct{})
-					for _, bStmt := range elseBlock.List {
-						v.ifAssign(bStmt, func(assign *ast.AssignStmt) {
-							for i, lexp := range assign.Lhs {
-								if lIdent, lok := lexp.(*ast.Ident); lok {
-									isNil := v.isNil(assign.Rhs[i])
-									if isNil {
-										delete(assignInBranch, lIdent.Name)
-									} else {
-										assignInBranch[lIdent.Name] = empty
-									}
-								}
-							}
-						})
-					}
-					for name, _ := range assignInIf {
-						if _, ok := assignInBranch[name]; !ok {
-							delete(assignInIf, name)
-						}
-					}
-				}
-				for assigned := range assignInIf {
+				assignedInIfStmt := v.analysisIf(ifStmt, make(map[string]struct{}), true)
+				for assigned := range assignedInIfStmt {
 					delete(mayNilVars, assigned)
 				}
 			})
@@ -154,6 +111,62 @@ func (v *testVisitor) Visit(node ast.Node) (w ast.Visitor) {
 		}
 	})
 	return v
+}
+
+func (v *testVisitor) analysisAssignInBlock(stmts []ast.Stmt) map[string]struct{} {
+	assignInBlock := make(map[string]struct{})
+	for _, bStmt := range stmts {
+		v.ifAssign(bStmt, func(assign *ast.AssignStmt) {
+			for i, lexp := range assign.Lhs {
+				if lIdent, lok := lexp.(*ast.Ident); lok {
+					isNil := v.isNil(assign.Rhs[i])
+					if isNil {
+						delete(assignInBlock, lIdent.Name)
+					} else {
+						assignInBlock[lIdent.Name] = empty
+					}
+				}
+			}
+		})
+		v.ifIf(bStmt, func(ifStmt *ast.IfStmt) {
+			assignedInIfStmt := v.analysisIf(ifStmt, make(map[string]struct{}), true)
+			for assigned := range assignedInIfStmt {
+				assignInBlock[assigned] = empty
+			}
+		})
+	}
+	return assignInBlock
+}
+
+func (v *testVisitor) analysisIf(ifStmt *ast.IfStmt, assigned map[string]struct{}, init bool) map[string]struct{} {
+	if ifStmt.Else == nil {
+		return make(map[string]struct{})
+	}
+	assignInBranch := v.analysisAssignInBlock(ifStmt.Body.List)
+	if init {
+		for name, v := range assignInBranch {
+			assigned[name] = v
+		}
+	} else {
+		for name, _ := range assigned {
+			if _, ok := assignInBranch[name]; !ok {
+				delete(assigned, name)
+			}
+		}
+	}
+
+	if elseIfBlock, ok := ifStmt.Else.(*ast.IfStmt); ok {
+		assigned = v.analysisIf(elseIfBlock, assigned, false)
+	}
+	if elseBlock, ok := ifStmt.Else.(*ast.BlockStmt); ok {
+		assignInBranch := v.analysisAssignInBlock(elseBlock.List)
+		for name, _ := range assigned {
+			if _, ok := assignInBranch[name]; !ok {
+				delete(assigned, name)
+			}
+		}
+	}
+	return assigned
 }
 
 func (v *testVisitor) isNil(e ast.Expr) bool {
@@ -196,6 +209,12 @@ func b() error {
     err = &TestErr{}
     err = nil
     if true {
+       if true {
+          err = &TestErr{}
+       } else {
+       	  err = &TestErr{}
+       }
+    } else if true {
        err = &TestErr{}
     } else {
        err = &TestErr{}
