@@ -100,9 +100,14 @@ func (v *testVisitor) Visit(node ast.Node) (w ast.Visitor) {
 			})
 
 			v.ifIf(stmt, func(ifStmt *ast.IfStmt) {
-				assignedInIfStmt := v.analysisIf(ifStmt, make(map[string]struct{}), true)
+				assignedInIfStmt,nilInIfStmt := v.analysisIf(ifStmt, make(map[string]struct{}), make(map[string]struct{}), true)
 				for assigned := range assignedInIfStmt {
 					delete(mayNilVars, assigned)
+				}
+				for nilled := range nilInIfStmt {
+					if _, ok := starTypeVars[nilled]; ok {
+						mayNilVars[nilled] = empty
+					}
 				}
 			})
 
@@ -124,39 +129,45 @@ func (v *testVisitor) Visit(node ast.Node) (w ast.Visitor) {
 	return v
 }
 
-func (v *testVisitor) analysisAssignInBlock(stmts []ast.Stmt) map[string]struct{} {
+func (v *testVisitor) analysisAssignInBlock(stmts []ast.Stmt) (map[string]struct{}, map[string]struct{}) {
 	assignInBlock := make(map[string]struct{})
+	nilInBlock := make(map[string]struct{})
 	for _, bStmt := range stmts {
 		v.ifAssign(bStmt, func(assign *ast.AssignStmt) {
 			for i, lexp := range assign.Lhs {
 				if lIdent, lok := lexp.(*ast.Ident); lok {
 					isNil := v.isNil(assign.Rhs[i])
 					if isNil {
+						nilInBlock[lIdent.Name] = empty
 						delete(assignInBlock, lIdent.Name)
 					} else {
 						assignInBlock[lIdent.Name] = empty
+						delete(nilInBlock, lIdent.Name)
 					}
 				}
 			}
 		})
 		v.ifIf(bStmt, func(ifStmt *ast.IfStmt) {
-			assignedInIfStmt := v.analysisIf(ifStmt, make(map[string]struct{}), true)
+			assignedInIfStmt, nilledInIfStmt := v.analysisIf(ifStmt, make(map[string]struct{}), make(map[string]struct{}), true)
 			for assigned := range assignedInIfStmt {
 				assignInBlock[assigned] = empty
 			}
+			for nilled := range nilledInIfStmt {
+				nilInBlock[nilled] = empty
+			}
 		})
 	}
-	return assignInBlock
+	return assignInBlock, nilInBlock
 }
 
-func (v *testVisitor) analysisIf(ifStmt *ast.IfStmt, assigned map[string]struct{}, init bool) map[string]struct{} {
+func (v *testVisitor) analysisIf(ifStmt *ast.IfStmt, assigned map[string]struct{}, nilled map[string]struct{}, init bool) (map[string]struct{}, map[string]struct{}) {
 	if ifStmt.Else == nil {
-		return make(map[string]struct{})
+		assigned = make(map[string]struct{})
 	}
-	assignInBranch := v.analysisAssignInBlock(ifStmt.Body.List)
+	assignInBranch, nilInBranch := v.analysisAssignInBlock(ifStmt.Body.List)
 	if init {
-		for name, v := range assignInBranch {
-			assigned[name] = v
+		for name, value := range assignInBranch {
+			assigned[name] = value
 		}
 	} else {
 		for name, _ := range assigned {
@@ -165,19 +176,30 @@ func (v *testVisitor) analysisIf(ifStmt *ast.IfStmt, assigned map[string]struct{
 			}
 		}
 	}
-
-	if elseIfBlock, ok := ifStmt.Else.(*ast.IfStmt); ok {
-		assigned = v.analysisIf(elseIfBlock, assigned, false)
+	for name, value := range nilInBranch {
+		nilled[name] = value
 	}
-	if elseBlock, ok := ifStmt.Else.(*ast.BlockStmt); ok {
-		assignInBranch := v.analysisAssignInBlock(elseBlock.List)
-		for name, _ := range assigned {
-			if _, ok := assignInBranch[name]; !ok {
-				delete(assigned, name)
+
+	if ifStmt.Else != nil {
+
+		if elseIfBlock, ok := ifStmt.Else.(*ast.IfStmt); ok {
+			assigned, nilled = v.analysisIf(elseIfBlock, assigned, nilled, false)
+		}
+
+		if elseBlock, ok := ifStmt.Else.(*ast.BlockStmt); ok {
+			assignInBranch, nilInBranch := v.analysisAssignInBlock(elseBlock.List)
+			for name, _ := range assigned {
+				if _, ok := assignInBranch[name]; !ok {
+					delete(assigned, name)
+				}
+			}
+			for name, _ := range nilInBranch {
+				nilled[name] = empty
 			}
 		}
+
 	}
-	return assigned
+	return assigned, nilled
 }
 
 func (v *testVisitor) isNil(e ast.Expr) bool {
@@ -216,23 +238,25 @@ func (t *TestErr) Error() string {
 }
 
 func b() (error, error) {
-    var err *TestErr = nil
-    var a *TestErr = &TestErr{}
-    err = &TestErr{}
-    err = nil
+    var a *TestErr = nil
+    var b *TestErr = &TestErr{}
+    a = &TestErr{}
+    a = nil
     if true {
        if true {
-          a = nil
-          err = &TestErr{}
+          b = nil
+          a = &TestErr{}
+          b = &TestErr{}
+          b = nil
        } else {
-       	  err = &TestErr{}
+       	  a = &TestErr{}
        }
     } else if true {
-       err = &TestErr{}
+       a = &TestErr{}
     } else {
-       err = &TestErr{}
+       a = &TestErr{}
     }
-	return err, a
+	return a, b
 }
 
 func main() {
