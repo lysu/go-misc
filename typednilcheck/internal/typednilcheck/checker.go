@@ -25,8 +25,9 @@ type Checker struct {
 }
 
 type PossibleTypedNilError struct {
-	Pos  token.Position
-	Line string
+	Pos    token.Position
+	Line   string
+	Symbol string
 }
 
 type PossibleTypedNilErrors struct {
@@ -142,7 +143,7 @@ type fileVisitor struct {
 	errors []PossibleTypedNilError
 }
 
-func (v *fileVisitor) addErrorAtPosition(position token.Pos) {
+func (v *fileVisitor) addErrorAtPosition(position token.Pos, symbol string) {
 	pos := v.prog.Fset.Position(position)
 	lines, ok := v.lines[pos.Filename]
 	if !ok {
@@ -154,7 +155,7 @@ func (v *fileVisitor) addErrorAtPosition(position token.Pos) {
 	if pos.Line-1 < len(lines) {
 		line = strings.TrimSpace(lines[pos.Line-1])
 	}
-	v.errors = append(v.errors, PossibleTypedNilError{pos, line})
+	v.errors = append(v.errors, PossibleTypedNilError{pos, line, symbol})
 }
 
 func readfile(filename string) []string {
@@ -245,11 +246,16 @@ func (v *funcVisitor) Visit(node ast.Node) ast.Visitor {
 		}
 		return nil
 	case *ast.IfStmt:
-		return &ifVisitor{
-			funcVisitor: v,
-			assignedVar: make(map[string]struct{}),
-			nilVar:      make(map[string]struct{}),
+		assignedInIfStmt, nilInIfStmt := v.analysisIf(t, make(map[string]struct{}), make(map[string]struct{}), true)
+		for assigned := range assignedInIfStmt {
+			delete(v.nilVar, assigned)
 		}
+		for nilled := range nilInIfStmt {
+			if _, ok := v.ptrVar[nilled]; ok {
+				v.nilVar[nilled] = empty
+			}
+		}
+		return nil
 	case *ast.ReturnStmt:
 		if len(v.retInterfIdex) == 0 {
 			return nil
@@ -258,7 +264,7 @@ func (v *funcVisitor) Visit(node ast.Node) ast.Visitor {
 			result := t.Results[idx]
 			if ident, ok := result.(*ast.Ident); ok {
 				if _, ok := v.nilVar[ident.Name]; ok {
-					v.fileVisitor.addErrorAtPosition(ident.Pos())
+					v.fileVisitor.addErrorAtPosition(ident.Pos(), ident.Name)
 				}
 			}
 		}
@@ -267,16 +273,93 @@ func (v *funcVisitor) Visit(node ast.Node) ast.Visitor {
 	return v
 }
 
+func (v *funcVisitor) analysisIf(ifStmt *ast.IfStmt, assigned map[string]struct{}, nilled map[string]struct{}, init bool) (map[string]struct{}, map[string]struct{}) {
+	if ifStmt.Else == nil {
+		assigned = make(map[string]struct{})
+	}
+	assignInBranch, nilInBranch := v.analysisAssignInBlock(ifStmt.Body)
+	if init {
+		for name, value := range assignInBranch {
+			assigned[name] = value
+		}
+	} else {
+		for name, _ := range assigned {
+			if _, ok := assignInBranch[name]; !ok {
+				delete(assigned, name)
+			}
+		}
+	}
+	for name, value := range nilInBranch {
+		nilled[name] = value
+	}
+
+	if ifStmt.Else != nil {
+
+		if elseIfBlock, ok := ifStmt.Else.(*ast.IfStmt); ok {
+			assigned, nilled = v.analysisIf(elseIfBlock, assigned, nilled, false)
+		}
+
+		if elseBlock, ok := ifStmt.Else.(*ast.BlockStmt); ok {
+			assignInBranch, nilInBranch := v.analysisAssignInBlock(elseBlock)
+			for name, _ := range assigned {
+				if _, ok := assignInBranch[name]; !ok {
+					delete(assigned, name)
+				}
+			}
+			for name, _ := range nilInBranch {
+				nilled[name] = empty
+			}
+		}
+
+	}
+	return assigned, nilled
+}
+
+func (v *funcVisitor) analysisAssignInBlock(block *ast.BlockStmt) (map[string]struct{}, map[string]struct{}) {
+	visitor := &BlockVisitor{
+		funcVisitor:   v,
+		assignInBlock: make(map[string]struct{}),
+		nilInBlock:    make(map[string]struct{}),
+	}
+	ast.Walk(visitor, block)
+	return visitor.assignInBlock, visitor.nilInBlock
+}
+
 func (v *funcVisitor) isNil(e ast.Expr) bool {
 	return v.fileVisitor.pkg.Types[e].Type == types.Typ[types.UntypedNil]
 }
 
-type ifVisitor struct {
-	funcVisitor *funcVisitor
-	assignedVar map[string]struct{}
-	nilVar      map[string]struct{}
+type BlockVisitor struct {
+	funcVisitor   *funcVisitor
+	assignInBlock map[string]struct{}
+	nilInBlock    map[string]struct{}
 }
 
-func (v *ifVisitor) Visit(node ast.Node) ast.Visitor {
+func (v *BlockVisitor) Visit(node ast.Node) ast.Visitor {
+	switch t := node.(type) {
+	case *ast.AssignStmt:
+		for i, lexp := range t.Lhs {
+			if lIdent, lok := lexp.(*ast.Ident); lok {
+				isNil := v.funcVisitor.isNil(t.Rhs[i])
+				if isNil {
+					v.nilInBlock[lIdent.Name] = empty
+					delete(v.assignInBlock, lIdent.Name)
+				} else {
+					v.assignInBlock[lIdent.Name] = empty
+					delete(v.nilInBlock, lIdent.Name)
+				}
+			}
+		}
+		return nil
+	case *ast.IfStmt:
+		assignedInIfStmt, nilledInIfStmt := v.funcVisitor.analysisIf(t, make(map[string]struct{}), make(map[string]struct{}), true)
+		for assigned := range assignedInIfStmt {
+			v.assignInBlock[assigned] = empty
+		}
+		for nilled := range nilledInIfStmt {
+			v.nilInBlock[nilled] = empty
+		}
+		return nil
+	}
 	return v
 }

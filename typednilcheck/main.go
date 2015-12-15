@@ -49,7 +49,7 @@ func reportPossibleNilErrors(e typednilcheck.PossibleTypedNilErrors) {
 				pos = pos[i+len("/src/"):]
 			}
 		}
-		fmt.Printf("%s\t%s\n", pos, uncheckedError.Line)
+		fmt.Printf("%s\t%s\t%s\n", pos, uncheckedError.Line, "| possible typed nil ---> " + uncheckedError.Symbol)
 	}
 }
 

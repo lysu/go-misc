@@ -20,7 +20,7 @@ func b() (error, error) {
 			b = &TestErr{}
 			b = nil
 		} else {
-			a = &TestErr{}
+//			a = &TestErr{}
 		}
 	} else if true {
 		a = &TestErr{}
