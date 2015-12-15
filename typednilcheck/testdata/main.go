@@ -9,41 +9,44 @@ func (t *TestErr) Error() string {
 }
 
 func b() (error, error) {
-	var a *TestErr = nil
-	var b *TestErr = &TestErr{}
-	a = &TestErr{}
-	a = nil
-	if true {
+//	var a *TestErr = nil
+//	var b *TestErr = &TestErr{}
+//	a = &TestErr{}
+//	a = nil
+	var z *TestErr
+//	z = nil
+	if zz := z; true {
 		if true {
-			b = nil
-			a = &TestErr{}
-			b = &TestErr{}
-			b = nil
-			c := &TestErr{}
-			c = nil
-			return a, c
+//			b = nil
+//			a = &TestErr{}
+//			b = &TestErr{}
+//			b = nil
+//			c := zz
+			zz = &TestErr{}
+			return nil, nil
 		} else {
-			a = &TestErr{}
+//			a = &TestErr{}
+			return zz, nil
 		}
-	} else if true {
-		a = &TestErr{}
-	} else {
-		a = &TestErr{}
+//	} else if true {
+//		a = &TestErr{}
+//	} else {
+//		a = &TestErr{}
 	}
-	for {
-		b = nil
-		if true {
-			b = &TestErr{}
-		}
-	}
-	b = &TestErr{}
-	var c *TestErr
-	if b = c; b != nil {
-
-	}
-	d := &TestErr{}
-	d = nil
-	return d, b
+//	for {
+//		b = nil
+//		if true {
+//			b = &TestErr{}
+//		}
+//	}
+//	b = &TestErr{}
+//	var c *TestErr
+//	if b = c; b != nil {
+//
+//	}
+//	d := &TestErr{}
+//	d = nil
+	return nil, nil
 }
 
 func main() {

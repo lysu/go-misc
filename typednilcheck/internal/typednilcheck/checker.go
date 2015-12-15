@@ -356,7 +356,7 @@ func (v *blockVisitor) Visit(node ast.Node) ast.Visitor {
 			for _, spec := range gDel.Specs {
 				if varSpec, ok := spec.(*ast.ValueSpec); ok {
 					ptrType := false
-					if varSpec.Type == nil {
+					if varSpec.Type != nil {
 						_, ptrType = varSpec.Type.(*ast.StarExpr)
 					}
 					for i, name := range varSpec.Names {
@@ -382,8 +382,8 @@ func (v *blockVisitor) Visit(node ast.Node) ast.Visitor {
 			if lIdent, lok := lexp.(*ast.Ident); lok {
 				isDefine := t.Tok == token.DEFINE
 				isNil := v.isNilPtr(t.Rhs[i])
-                                isAssign := v.isAssignPrt(t.Rhs[i])
-				if isDefine && isAssign {
+				isAssign := v.isAssignPrt(t.Rhs[i])
+				if isDefine && (isAssign || isNil) {
 					v.innerDeclare[lIdent.Name] = empty
 				}
 				if _, ok := v.innerDeclare[lIdent.Name]; ok {
@@ -423,7 +423,7 @@ func (v *blockVisitor) Visit(node ast.Node) ast.Visitor {
 			for _, idx := range v.funcVisitor.retInterfIdex {
 				result := t.Results[idx]
 				if ident, ok := result.(*ast.Ident); ok {
-					if _, ok := v.innerNil[ident.Name]; ok {
+					if v.checkIsNil(ident.Name) {
 						v.funcVisitor.fileVisitor.addErrorAtPosition(ident.Pos(), ident.Name)
 					}
 				}
@@ -443,16 +443,23 @@ func (v *blockVisitor) Visit(node ast.Node) ast.Visitor {
 	case *ast.SwitchStmt:
 
 	case *ast.IfStmt:
+		nextVisitor := v
 		if t.Init != nil {
 			switch t := t.Init.(type) {
 			case *ast.AssignStmt:
-				if t.Tok != token.DEFINE {
-					return v
+				nextVisitor = &blockVisitor{
+					parent:       v,
+					funcVisitor:  v.funcVisitor,
+					outAssign:    make(map[string]struct{}),
+					outNil:       make(map[string]struct{}),
+					innerDeclare: make(map[string]struct{}),
+					innerAssign:  make(map[string]struct{}),
+					innerNil:     make(map[string]struct{}),
 				}
-
+				ast.Walk(nextVisitor, t)
 			}
 		}
-		assignedInIfStmt, nilledInIfStmt := v.analysisIf(t, make(map[string]struct{}), make(map[string]struct{}), true)
+		assignedInIfStmt, nilledInIfStmt := nextVisitor.analysisIf(t, make(map[string]struct{}), make(map[string]struct{}), true)
 		for assigned := range assignedInIfStmt {
 			if _, ok := v.innerDeclare[assigned]; ok {
 				v.innerAssign[assigned] = empty
