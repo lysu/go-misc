@@ -19,7 +19,8 @@ func b() (error, error) {
 			a = &TestErr{}
 			b = &TestErr{}
 			b = nil
-			var c *TestErr = nil
+			c := &TestErr{}
+			c = nil
 			return a, c
 		} else {
 			a = &TestErr{}
@@ -36,10 +37,13 @@ func b() (error, error) {
 		}
 	}
 	b = &TestErr{}
-	if b = nil; b != nil {
+	var c *TestErr
+	if b = c; b != nil {
 
 	}
-	return nil, b
+	d := &TestErr{}
+	d = nil
+	return d, b
 }
 
 func main() {
