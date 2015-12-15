@@ -19,15 +19,27 @@ func b() (error, error) {
 			a = &TestErr{}
 			b = &TestErr{}
 			b = nil
+			var c *TestErr = nil
+			return a, c
 		} else {
-//			a = &TestErr{}
+			a = &TestErr{}
 		}
 	} else if true {
 		a = &TestErr{}
 	} else {
 		a = &TestErr{}
 	}
-	return a, b
+	for {
+		b = nil
+		if true {
+			b = &TestErr{}
+		}
+	}
+	b = &TestErr{}
+	if b = nil; b != nil {
+
+	}
+	return nil, b
 }
 
 func main() {
