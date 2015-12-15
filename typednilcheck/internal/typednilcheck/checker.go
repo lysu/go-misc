@@ -178,11 +178,16 @@ func (v *fileVisitor) Visit(node ast.Node) ast.Visitor {
 		if t.Type.Results == nil {
 			return nil
 		}
+		retInterfName := make([]string, 0, len(t.Type.Results.List))
 		retInterfIdx := make([]int, 0, len(t.Type.Results.List))
 		for i, result := range t.Type.Results.List {
 			tv := v.pkg.Types[result.Type]
-			if types.IsInterface(tv.Type) {
-				retInterfIdx = append(retInterfIdx, i)
+			if !types.IsInterface(tv.Type) {
+				continue
+			}
+			retInterfIdx = append(retInterfIdx, i)
+			for _, name := range result.Names {
+				retInterfName = append(retInterfName, name.Name)
 			}
 		}
 		if len(retInterfIdx) == 0 {
@@ -191,6 +196,7 @@ func (v *fileVisitor) Visit(node ast.Node) ast.Visitor {
 		return &funcVisitor{
 			fileVisitor:   v,
 			retInterfIdex: retInterfIdx,
+			retInterfName: retInterfName,
 			ptrVar:        make(map[string]struct{}),
 			nilVar:        make(map[string]struct{}),
 		}
@@ -201,6 +207,7 @@ func (v *fileVisitor) Visit(node ast.Node) ast.Visitor {
 type funcVisitor struct {
 	fileVisitor   *fileVisitor
 	retInterfIdex []int
+	retInterfName []string
 	ptrVar        map[string]struct{}
 	nilVar        map[string]struct{}
 }
@@ -260,14 +267,26 @@ func (v *funcVisitor) Visit(node ast.Node) ast.Visitor {
 		if len(v.retInterfIdex) == 0 {
 			return nil
 		}
-		for _, idx := range v.retInterfIdex {
-			result := t.Results[idx]
-			if ident, ok := result.(*ast.Ident); ok {
-				if _, ok := v.nilVar[ident.Name]; ok {
-					v.fileVisitor.addErrorAtPosition(ident.Pos(), ident.Name)
+		if len(t.Results) > 0 {
+			for _, idx := range v.retInterfIdex {
+				result := t.Results[idx]
+				if ident, ok := result.(*ast.Ident); ok {
+					if _, ok := v.nilVar[ident.Name]; ok {
+						v.fileVisitor.addErrorAtPosition(ident.Pos(), ident.Name)
+					}
+				}
+			}
+			return nil
+		}
+
+		if len(v.retInterfName) > 0 {
+			for _, retName := range v.retInterfName {
+				if _, ok := v.nilVar[retName]; ok {
+					v.fileVisitor.addErrorAtPosition(t.Pos(), retName)
 				}
 			}
 		}
+
 		return nil
 	}
 	return v
