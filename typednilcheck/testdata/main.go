@@ -64,6 +64,7 @@ func b() (error, error) {
 		o := 1
 		fmt.Println(o)
 		z = &TestErr{}
+		fallthrough
 	case "bb":
 		fmt.Println("!212")
 		z = &TestErr{}

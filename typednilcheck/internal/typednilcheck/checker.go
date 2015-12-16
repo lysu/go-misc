@@ -220,11 +220,11 @@ func (v *funcVisitor) Visit(node ast.Node) ast.Visitor {
 	return nil
 }
 
-func (v *funcVisitor) analysisAssignInBlock(parent *blockVisitor, block *ast.BlockStmt) (map[string]struct{}, map[string]struct{}) {
+func (v *funcVisitor) analysisAssignInBlock(parent *blockVisitor, block *ast.BlockStmt) (map[string]struct{}, map[string]struct{}, bool) {
 	return v.analysisAssignInStmts(parent, block.List)
 }
 
-func (v *funcVisitor) analysisAssignInStmts(parent *blockVisitor, stmts []ast.Stmt) (map[string]struct{}, map[string]struct{}) {
+func (v *funcVisitor) analysisAssignInStmts(parent *blockVisitor, stmts []ast.Stmt) (map[string]struct{}, map[string]struct{}, bool) {
 	visitor := &blockVisitor{
 		parent:       parent,
 		funcVisitor:  v,
@@ -233,11 +233,12 @@ func (v *funcVisitor) analysisAssignInStmts(parent *blockVisitor, stmts []ast.St
 		innerDeclare: make(map[string]struct{}),
 		innerAssign:  make(map[string]struct{}),
 		innerNil:     make(map[string]struct{}),
+		fallthough:  false,
 	}
 	for _, stmt := range stmts {
 		ast.Walk(visitor, stmt)
 	}
-	return visitor.outAssign, visitor.outNil
+	return visitor.outAssign, visitor.outNil, visitor.fallthough
 }
 
 func (v *funcVisitor) eqNil(e ast.Expr) bool {
@@ -265,6 +266,7 @@ type blockVisitor struct {
 	innerDeclare map[string]struct{}
 	innerAssign  map[string]struct{}
 	innerNil     map[string]struct{}
+	fallthough   bool
 }
 
 func (v *blockVisitor) checkAssign(name string) bool {
@@ -363,6 +365,11 @@ func (v *blockVisitor) isAssignPrt(e ast.Expr) bool {
 
 func (v *blockVisitor) Visit(node ast.Node) ast.Visitor {
 	switch t := node.(type) {
+	case *ast.BranchStmt:
+		if t.Tok == token.FALLTHROUGH {
+			v.fallthough = true
+		}
+		return nil
 	case *ast.DeclStmt:
 		if gDel, ok := t.Decl.(*ast.GenDecl); ok {
 			if gDel.Tok != token.VAR && gDel.Tok != token.CONST {
@@ -500,7 +507,7 @@ func (v *blockVisitor) Visit(node ast.Node) ast.Visitor {
 		}
 		return nil
 	case *ast.ForStmt:
-		assignInBlock, nilInBlock := v.funcVisitor.analysisAssignInBlock(v, t.Body)
+		assignInBlock, nilInBlock, _ := v.funcVisitor.analysisAssignInBlock(v, t.Body)
 		for assigned := range assignInBlock {
 			if _, ok := v.innerDeclare[assigned]; ok {
 				v.innerAssign[assigned] = empty
@@ -522,7 +529,7 @@ func (v *blockVisitor) Visit(node ast.Node) ast.Visitor {
 		}
 		return nil
 	case *ast.RangeStmt:
-		assignInBlock, nilInBlock := v.funcVisitor.analysisAssignInBlock(v, t.Body)
+		assignInBlock, nilInBlock, _ := v.funcVisitor.analysisAssignInBlock(v, t.Body)
 		for assigned := range assignInBlock {
 			if _, ok := v.innerDeclare[assigned]; ok {
 				v.innerAssign[assigned] = empty
@@ -549,11 +556,11 @@ func (v *blockVisitor) Visit(node ast.Node) ast.Visitor {
 
 func (v *blockVisitor) analysisSwitch(switchStmt *ast.SwitchStmt, assigned map[string]struct{}, nilled map[string]struct{}, init bool) (map[string]struct{}, map[string]struct{}) {
 
-	innnVisitor := v
+	innerVisitor := v
 	if switchStmt.Init != nil {
 		switch t := switchStmt.Init.(type) {
 		case *ast.AssignStmt:
-			innnVisitor = &blockVisitor{
+			innerVisitor = &blockVisitor{
 				parent:       v,
 				funcVisitor:  v.funcVisitor,
 				outAssign:    make(map[string]struct{}),
@@ -562,7 +569,7 @@ func (v *blockVisitor) analysisSwitch(switchStmt *ast.SwitchStmt, assigned map[s
 				innerAssign:  make(map[string]struct{}),
 				innerNil:     make(map[string]struct{}),
 			}
-			ast.Walk(innnVisitor, t)
+			ast.Walk(innerVisitor, t)
 		}
 	}
 
@@ -570,7 +577,7 @@ func (v *blockVisitor) analysisSwitch(switchStmt *ast.SwitchStmt, assigned map[s
 	for idx, blockStmt := range switchStmt.Body.List {
 		if causeStmt, ok := blockStmt.(*ast.CaseClause); ok {
 			hasDefault = (causeStmt.List == nil)
-			assignInBranch, nilInBranch := innnVisitor.funcVisitor.analysisAssignInStmts(innnVisitor, causeStmt.Body)
+			assignInBranch, nilInBranch, _ := innerVisitor.funcVisitor.analysisAssignInStmts(innerVisitor, causeStmt.Body)
 			if idx == 0 {
 				for name, value := range assignInBranch {
 					assigned[name] = value
@@ -592,13 +599,13 @@ func (v *blockVisitor) analysisSwitch(switchStmt *ast.SwitchStmt, assigned map[s
 		assigned = make(map[string]struct{})
 	}
 
-	if len(innnVisitor.outNil) != 0 {
-		for initNil  := range innnVisitor.outNil {
+	if len(innerVisitor.outNil) != 0 {
+		for initNil  := range innerVisitor.outNil {
 			if _, ok := assigned[initNil]; !ok {
 				nilled[initNil] = empty
 			}
 		}
-		for assignNil := range innnVisitor.outAssign {
+		for assignNil := range innerVisitor.outAssign {
 			if _, ok := nilled[assignNil]; !ok {
 				assigned[assignNil] = empty
 			}
@@ -610,11 +617,11 @@ func (v *blockVisitor) analysisSwitch(switchStmt *ast.SwitchStmt, assigned map[s
 
 func (v *blockVisitor) analysisIf(ifStmt *ast.IfStmt, assigned map[string]struct{}, nilled map[string]struct{}, init bool) (map[string]struct{}, map[string]struct{}) {
 
-	innnVisitor := v
+	innerVisitor := v
 	if ifStmt.Init != nil {
 		switch t := ifStmt.Init.(type) {
 		case *ast.AssignStmt:
-			innnVisitor = &blockVisitor{
+			innerVisitor = &blockVisitor{
 				parent:       v,
 				funcVisitor:  v.funcVisitor,
 				outAssign:    make(map[string]struct{}),
@@ -623,11 +630,11 @@ func (v *blockVisitor) analysisIf(ifStmt *ast.IfStmt, assigned map[string]struct
 				innerAssign:  make(map[string]struct{}),
 				innerNil:     make(map[string]struct{}),
 			}
-			ast.Walk(innnVisitor, t)
+			ast.Walk(innerVisitor, t)
 		}
 	}
 
-	assignInBranch, nilInBranch := innnVisitor.funcVisitor.analysisAssignInBlock(innnVisitor, ifStmt.Body)
+	assignInBranch, nilInBranch, _ := innerVisitor.funcVisitor.analysisAssignInBlock(innerVisitor, ifStmt.Body)
 	if init {
 		for name, value := range assignInBranch {
 			assigned[name] = value
@@ -645,11 +652,11 @@ func (v *blockVisitor) analysisIf(ifStmt *ast.IfStmt, assigned map[string]struct
 
 	if ifStmt.Else != nil {
 		if elseIfBlock, ok := ifStmt.Else.(*ast.IfStmt); ok {
-			assigned, nilled = innnVisitor.analysisIf(elseIfBlock, assigned, nilled, false)
+			assigned, nilled = innerVisitor.analysisIf(elseIfBlock, assigned, nilled, false)
 		}
 
 		if elseBlock, ok := ifStmt.Else.(*ast.BlockStmt); ok {
-			assignInBranch, nilInBranch := innnVisitor.funcVisitor.analysisAssignInBlock(innnVisitor, elseBlock)
+			assignInBranch, nilInBranch, _ := innerVisitor.funcVisitor.analysisAssignInBlock(innerVisitor, elseBlock)
 			for name, _ := range assigned {
 				if _, ok := assignInBranch[name]; !ok {
 					delete(assigned, name)
@@ -664,13 +671,13 @@ func (v *blockVisitor) analysisIf(ifStmt *ast.IfStmt, assigned map[string]struct
 		assigned = make(map[string]struct{})
 	}
 
-	if len(innnVisitor.outNil) != 0 {
-		for initNil  := range innnVisitor.outNil {
+	if len(innerVisitor.outNil) != 0 {
+		for initNil  := range innerVisitor.outNil {
 			if _, ok := assigned[initNil]; !ok {
 				nilled[initNil] = empty
 			}
 		}
-		for assignNil := range innnVisitor.outAssign {
+		for assignNil := range innerVisitor.outAssign {
 			if _, ok := nilled[assignNil]; !ok {
 				assigned[assignNil] = empty
 			}
