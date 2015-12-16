@@ -1,5 +1,7 @@
 package main
 
+//import "fmt"
+
 type TestErr struct {
 	Msg string
 }
@@ -13,21 +15,30 @@ func b() (error, error) {
 //	var b *TestErr = &TestErr{}
 //	a = &TestErr{}
 //	a = nil
-	var z *TestErr
-//	z = nil
-	if zz := z; true {
-		if true {
+	var z *TestErr = nil
+	b := &TestErr{}
+	if zz := b; true {
+//		return zz, nil
+		if zz = z; true {
 //			b = nil
 //			a = &TestErr{}
 //			b = &TestErr{}
 //			b = nil
 //			c := zz
-			zz = &TestErr{}
-			return nil, nil
-		} else {
+//			zz = &TestErr{}
+//			fmt.Println(zz)
+//			return nil, nil
+//		} else if zz := b; true {
+//			if zz = z; true {
+//				return zz, nil
+//			}
 //			a = &TestErr{}
-			return zz, nil
+//			return zz, nil
+			zz = &TestErr{}
+		} else {
+			zz = &TestErr{}
 		}
+		return zz, nil
 //	} else if true {
 //		a = &TestErr{}
 //	} else {

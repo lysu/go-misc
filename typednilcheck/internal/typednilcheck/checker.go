@@ -286,6 +286,15 @@ func recurseNil(v *blockVisitor, name string) bool {
 	if _, ok := v.innerNil[name]; ok {
 		return true
 	}
+	if _, ok := v.innerAssign[name]; ok {
+		return false
+	}
+	if _, ok := v.outNil[name]; ok {
+		return true
+	}
+	if _, ok := v.outAssign[name]; ok {
+		return false
+	}
 	if v.parent != nil {
 		parentNil := recurseNil(v.parent, name)
 		if parentNil {
@@ -443,23 +452,7 @@ func (v *blockVisitor) Visit(node ast.Node) ast.Visitor {
 	case *ast.SwitchStmt:
 
 	case *ast.IfStmt:
-		nextVisitor := v
-		if t.Init != nil {
-			switch t := t.Init.(type) {
-			case *ast.AssignStmt:
-				nextVisitor = &blockVisitor{
-					parent:       v,
-					funcVisitor:  v.funcVisitor,
-					outAssign:    make(map[string]struct{}),
-					outNil:       make(map[string]struct{}),
-					innerDeclare: make(map[string]struct{}),
-					innerAssign:  make(map[string]struct{}),
-					innerNil:     make(map[string]struct{}),
-				}
-				ast.Walk(nextVisitor, t)
-			}
-		}
-		assignedInIfStmt, nilledInIfStmt := nextVisitor.analysisIf(t, make(map[string]struct{}), make(map[string]struct{}), true)
+		assignedInIfStmt, nilledInIfStmt := v.analysisIf(t, make(map[string]struct{}), make(map[string]struct{}), true)
 		for assigned := range assignedInIfStmt {
 			if _, ok := v.innerDeclare[assigned]; ok {
 				v.innerAssign[assigned] = empty
@@ -529,7 +522,25 @@ func (v *blockVisitor) Visit(node ast.Node) ast.Visitor {
 }
 
 func (v *blockVisitor) analysisIf(ifStmt *ast.IfStmt, assigned map[string]struct{}, nilled map[string]struct{}, init bool) (map[string]struct{}, map[string]struct{}) {
-	assignInBranch, nilInBranch := v.funcVisitor.analysisAssignInBlock(v, ifStmt.Body)
+
+	innnVisitor := v
+	if ifStmt.Init != nil {
+		switch t := ifStmt.Init.(type) {
+		case *ast.AssignStmt:
+			innnVisitor = &blockVisitor{
+				parent:       v,
+				funcVisitor:  v.funcVisitor,
+				outAssign:    make(map[string]struct{}),
+				outNil:       make(map[string]struct{}),
+				innerDeclare: make(map[string]struct{}),
+				innerAssign:  make(map[string]struct{}),
+				innerNil:     make(map[string]struct{}),
+			}
+			ast.Walk(innnVisitor, t)
+		}
+	}
+
+	assignInBranch, nilInBranch := innnVisitor.funcVisitor.analysisAssignInBlock(innnVisitor, ifStmt.Body)
 	if init {
 		for name, value := range assignInBranch {
 			assigned[name] = value
@@ -547,11 +558,11 @@ func (v *blockVisitor) analysisIf(ifStmt *ast.IfStmt, assigned map[string]struct
 
 	if ifStmt.Else != nil {
 		if elseIfBlock, ok := ifStmt.Else.(*ast.IfStmt); ok {
-			assigned, nilled = v.analysisIf(elseIfBlock, assigned, nilled, false)
+			assigned, nilled = innnVisitor.analysisIf(elseIfBlock, assigned, nilled, false)
 		}
 
 		if elseBlock, ok := ifStmt.Else.(*ast.BlockStmt); ok {
-			assignInBranch, nilInBranch := v.funcVisitor.analysisAssignInBlock(v, elseBlock)
+			assignInBranch, nilInBranch := innnVisitor.funcVisitor.analysisAssignInBlock(innnVisitor, elseBlock)
 			for name, _ := range assigned {
 				if _, ok := assignInBranch[name]; !ok {
 					delete(assigned, name)
@@ -565,5 +576,19 @@ func (v *blockVisitor) analysisIf(ifStmt *ast.IfStmt, assigned map[string]struct
 	} else {
 		assigned = make(map[string]struct{})
 	}
+
+	if len(innnVisitor.outNil) != 0 {
+		for initNil  := range innnVisitor.outNil {
+			if _, ok := assigned[initNil]; !ok {
+				nilled[initNil] = empty
+			}
+		}
+		for assignNil := range innnVisitor.outAssign {
+			if _, ok := nilled[assignNil]; !ok {
+				assigned[assignNil] = empty
+			}
+		}
+	}
+
 	return assigned, nilled
 }
