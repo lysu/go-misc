@@ -1,4 +1,5 @@
 package main
+import "fmt"
 
 //import "fmt"
 
@@ -15,11 +16,9 @@ func b() (error, error) {
 //	var b *TestErr = &TestErr{}
 //	a = &TestErr{}
 //	a = nil
-	var z *TestErr = nil
-	b := &TestErr{}
-	if zz := b; true {
+//	if zz := b; true {
 //		return zz, nil
-		if zz = z; true {
+//		if zz = z; true {
 //			b = nil
 //			a = &TestErr{}
 //			b = &TestErr{}
@@ -34,16 +33,16 @@ func b() (error, error) {
 //			}
 //			a = &TestErr{}
 //			return zz, nil
-			zz = &TestErr{}
-		} else {
-			zz = &TestErr{}
-		}
-		return zz, nil
+//			zz = &TestErr{}
+//		} else {
+//			zz = &TestErr{}
+//		}
+//		return zz, nil
 //	} else if true {
 //		a = &TestErr{}
 //	} else {
 //		a = &TestErr{}
-	}
+//	}
 //	for {
 //		b = nil
 //		if true {
@@ -57,7 +56,19 @@ func b() (error, error) {
 //	}
 //	d := &TestErr{}
 //	d = nil
-	return nil, nil
+	var z *TestErr = nil
+	b := &TestErr{}
+	a := "aaa"
+	switch a {
+	case "aaa":
+		o := 1
+		fmt.Println(o)
+		z = &TestErr{}
+	case "bb":
+		fmt.Println("!212")
+		z = &TestErr{}
+	}
+	return z, b
 }
 
 func main() {
