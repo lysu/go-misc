@@ -341,6 +341,14 @@ func (v *blockVisitor) isNilPtr(e ast.Expr) bool {
 		if v.checkIsNil(t.Name) {
 			return true
 		}
+	case *ast.CallExpr:
+		//t.Fun
+//		tt := v.funcVisitor.fileVisitor.pkg.Scopes[t.Fun.(*ast.Ident)]
+		for key, value := range v.funcVisitor.fileVisitor.pkg.Scopes {
+			if funcType, ok := key.(*ast.FuncType); ok {
+				fmt.Printf("%T -> %+v   %+v\n", funcType, funcType, value)
+			}
+		}
 	}
 	return false
 }
