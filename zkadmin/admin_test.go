@@ -2,7 +2,7 @@ package zkadmin_test
 
 import (
 	"testing"
-	"gopkg.in/lysu/kazoo-go.v0"
+	"github.com/wvanbergen/kazoo-go"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -12,11 +12,16 @@ func TestCreateTopic(t *testing.T) {
 	kz, err := kazoo.NewKazoo([]string{"127.0.0.1:2181"}, config)
 	assert.NoError(t, err)
 
-	err = kz.CreateTopic("test_ddd113", 1, 1, make(map[string]interface{}))
+	err = kz.CreateTopic("test_ddd111213", 1, 1, make(map[string]interface{}))
+	assert.NoError(t, err)
+
+	err = kz.ChangeTopicConfig("test_ddd111213", map[string]interface{}{
+		"a": "b",
+	})
 	assert.NoError(t, err)
 
 
-	err = kz.DeleteTopic("test_ddd113")
+	err = kz.DeleteTopic("test_ddd111213")
 	assert.NoError(t, err)
 
 }
