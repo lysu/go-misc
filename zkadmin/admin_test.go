@@ -12,16 +12,20 @@ func TestCreateTopic(t *testing.T) {
 	kz, err := kazoo.NewKazoo([]string{"127.0.0.1:2181"}, config)
 	assert.NoError(t, err)
 
-	err = kz.CreateTopic("test_ddd111213", 1, 1, make(map[string]interface{}))
+	topic := "test_d6"
+
+	err = kz.CreateTopic(topic, 1, 1, make(map[string]interface{}))
 	assert.NoError(t, err)
 
-	err = kz.ChangeTopicConfig("test_ddd111213", map[string]interface{}{
+	err = kz.ChangeTopicConfig(topic, map[string]interface{}{
 		"a": "b",
 	})
 	assert.NoError(t, err)
 
+	err = kz.AddPartitions(topic, 2, "0:2", true)
+	assert.NoError(t, err)
 
-	err = kz.DeleteTopic("test_ddd111213")
+	err = kz.DeleteTopic(topic)
 	assert.NoError(t, err)
 
 }
