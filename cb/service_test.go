@@ -2,9 +2,9 @@ package cb_test
 
 import (
 	"fmt"
+	"github.com/lysu/go-misc/cb"
 	"golang.org/x/net/context"
 	"testing"
-	"github.com/lysu/go-misc/cb"
 )
 
 func TestAbc(t *testing.T) {
@@ -31,7 +31,7 @@ func TestAbc(t *testing.T) {
 			rep.Failure <- fmt.Errorf("niled")
 			return rep
 		}
-		return service(ctx ,req)
+		return service(ctx, req)
 	}
 
 	f = f.AndThenFilter(func(ctx context.Context, req interface{}, service cb.Service) cb.RepChannels {
@@ -44,13 +44,13 @@ func TestAbc(t *testing.T) {
 			rep.Failure <- fmt.Errorf("niled")
 			return rep
 		}
-		return service(ctx ,req)
+		return service(ctx, req)
 	})
 
 	s = f.AndThenService(s)
 
 	ctx := context.Background()
-	var req interface{} = struct {}{}
+	var req interface{} = struct{}{}
 	repChannels := s(ctx, req)
 
 	select {

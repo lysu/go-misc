@@ -24,9 +24,7 @@ func (f Filter) AndThenFilter(nf Filter) Filter {
 	}
 }
 
-
 type ClientConnection struct {
-
 }
 
 type ServiceChannel struct {
