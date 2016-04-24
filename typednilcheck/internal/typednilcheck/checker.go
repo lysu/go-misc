@@ -233,7 +233,7 @@ func (v *funcVisitor) analysisAssignInStmts(parent *blockVisitor, stmts []ast.St
 		innerDeclare: make(map[string]struct{}),
 		innerAssign:  make(map[string]struct{}),
 		innerNil:     make(map[string]struct{}),
-		fallthough:  false,
+		fallthough:   false,
 	}
 	for _, stmt := range stmts {
 		ast.Walk(visitor, stmt)
@@ -343,7 +343,7 @@ func (v *blockVisitor) isNilPtr(e ast.Expr) bool {
 		}
 	case *ast.CallExpr:
 		//t.Fun
-//		tt := v.funcVisitor.fileVisitor.pkg.Scopes[t.Fun.(*ast.Ident)]
+		//		tt := v.funcVisitor.fileVisitor.pkg.Scopes[t.Fun.(*ast.Ident)]
 		for key, value := range v.funcVisitor.fileVisitor.pkg.Scopes {
 			if funcType, ok := key.(*ast.FuncType); ok {
 				fmt.Printf("%T -> %+v   %+v\n", funcType, funcType, value)
@@ -591,7 +591,7 @@ func (v *blockVisitor) analysisSwitch(switchStmt *ast.SwitchStmt, assigned map[s
 					assigned[name] = value
 				}
 			} else {
-				for name, _ := range assigned {
+				for name := range assigned {
 					if _, ok := assignInBranch[name]; !ok {
 						delete(assigned, name)
 					}
@@ -608,7 +608,7 @@ func (v *blockVisitor) analysisSwitch(switchStmt *ast.SwitchStmt, assigned map[s
 	}
 
 	if len(innerVisitor.outNil) != 0 {
-		for initNil  := range innerVisitor.outNil {
+		for initNil := range innerVisitor.outNil {
 			if _, ok := assigned[initNil]; !ok {
 				nilled[initNil] = empty
 			}
@@ -648,7 +648,7 @@ func (v *blockVisitor) analysisIf(ifStmt *ast.IfStmt, assigned map[string]struct
 			assigned[name] = value
 		}
 	} else {
-		for name, _ := range assigned {
+		for name := range assigned {
 			if _, ok := assignInBranch[name]; !ok {
 				delete(assigned, name)
 			}
@@ -665,12 +665,12 @@ func (v *blockVisitor) analysisIf(ifStmt *ast.IfStmt, assigned map[string]struct
 
 		if elseBlock, ok := ifStmt.Else.(*ast.BlockStmt); ok {
 			assignInBranch, nilInBranch, _ := innerVisitor.funcVisitor.analysisAssignInBlock(innerVisitor, elseBlock)
-			for name, _ := range assigned {
+			for name := range assigned {
 				if _, ok := assignInBranch[name]; !ok {
 					delete(assigned, name)
 				}
 			}
-			for name, _ := range nilInBranch {
+			for name := range nilInBranch {
 				nilled[name] = empty
 			}
 		}
@@ -680,7 +680,7 @@ func (v *blockVisitor) analysisIf(ifStmt *ast.IfStmt, assigned map[string]struct
 	}
 
 	if len(innerVisitor.outNil) != 0 {
-		for initNil  := range innerVisitor.outNil {
+		for initNil := range innerVisitor.outNil {
 			if _, ok := assigned[initNil]; !ok {
 				nilled[initNil] = empty
 			}

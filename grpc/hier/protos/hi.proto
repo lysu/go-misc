@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+option java_package = "test.robitest";
+
+package hi;
+
+service Hier {
+    rpc SayHi (Req) returns (Resp) {}
+}
+
+message Req {
+    string name = 1;
+}
+
+message Resp {
+    string message = 1;
+}

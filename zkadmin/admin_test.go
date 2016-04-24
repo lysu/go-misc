@@ -1,9 +1,9 @@
 package zkadmin_test
 
 import (
-	"testing"
-	"github.com/wvanbergen/kazoo-go"
 	"github.com/stretchr/testify/assert"
+	"github.com/wvanbergen/kazoo-go"
+	"testing"
 )
 
 func TestCreateTopic(t *testing.T) {

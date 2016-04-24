@@ -1,12 +1,12 @@
 package main
 
 import (
+	"flag"
+	"fmt"
+	"github.com/kisielk/gotool"
+	"github.com/lysu/go-misc/typednilcheck/internal/typednilcheck"
 	"os"
 	"runtime"
-	"github.com/lysu/go-misc/typednilcheck/internal/typednilcheck"
-	"fmt"
-	"flag"
-	"github.com/kisielk/gotool"
 	"strings"
 )
 
@@ -49,10 +49,9 @@ func reportPossibleNilErrors(e typednilcheck.PossibleTypedNilErrors) {
 				pos = pos[i+len("/src/"):]
 			}
 		}
-		fmt.Printf("%s\t%s\t%s\n", pos, uncheckedError.Line, "| possible typed nil ---> " + uncheckedError.Symbol)
+		fmt.Printf("%s\t%s\t%s\n", pos, uncheckedError.Line, "| possible typed nil ---> "+uncheckedError.Symbol)
 	}
 }
-
 
 func parseFlags(checker *typednilcheck.Checker, args []string) ([]string, int) {
 	flags := flag.NewFlagSet(args[0], flag.ContinueOnError)
