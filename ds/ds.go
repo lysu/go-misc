@@ -52,7 +52,10 @@ func DoTx(c context.Context, f func(c context.Context) (interface{}, error), noR
 	c = context.WithValue(c, DS_EXECUTOR_KEY, tx)
 	v, err = f(c)
 	if err != nil && !isRollbackErr(err, noRollbackErrs) {
-		err = tx.Rollback()
+		err2 := tx.Rollback()
+		if err2 != nil {
+			err = err2
+		}
 		return
 	}
 	err = tx.Commit()
