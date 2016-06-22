@@ -45,7 +45,8 @@ func DoTx(c context.Context, f func(c context.Context) (interface{}, error), noR
 	if dsKey == nil {
 		dsKey = DEFAULT_DATASOURCE
 	}
-	tx, err := DataSources[dsKey.(string)].Beginx()
+	var tx *sqlx.Tx
+	tx, err = DataSources[dsKey.(string)].Beginx()
 	if err != nil {
 		return
 	}
